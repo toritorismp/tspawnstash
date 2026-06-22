@@ -1,0 +1,16 @@
+name: Tspawnstash
+version: 1.0-SNAPSHOT
+main: toritori.tspawnstash.Tspawnstash
+api-version: '1.21'
+folia-supported: true
+
+commands:
+  spawnstash:
+    permission: spawnstash.allow
+
+permissions:
+  spawnstash.allow:
+    default: op
+
+  spawnstash.give:
+    default: op
