@@ -18,6 +18,12 @@ public class StashManager {
             new HashMap<>();
 
     /*
+        設置前のブロックを保存
+     */
+    private static final Map<UUID, Map<Location, Material>> originalBlocks =
+            new HashMap<>();
+
+    /*
         SpawnStashのブロックか判定
      */
     public static boolean isStashBlock(Location loc) {
@@ -44,7 +50,6 @@ public class StashManager {
         if (!placedBlocks.containsKey(uuid))
             return false;
 
-        // 1個でも残っていたら存在する
         for (Location loc : placedBlocks.get(uuid)) {
 
             if (loc.getBlock().getType() != Material.AIR)
@@ -55,7 +60,7 @@ public class StashManager {
     }
 
     /*
-        ブロック設置
+        ブロックを少しずつ設置
      */
     public static void placeGradually(
             Player player,
@@ -96,7 +101,6 @@ public class StashManager {
                             }
 
                             if (!iterator.hasNext()) {
-
                                 task.cancel();
                             }
 
@@ -106,13 +110,19 @@ public class StashManager {
                         1L
                 );
     }
+
+    /*
+        ブロック設置
+     */
     public static void place(Player player,
                              Location loc,
                              Material material) {
 
+        UUID uuid = player.getUniqueId();
+
         placedBlocks
                 .computeIfAbsent(
-                        player.getUniqueId(),
+                        uuid,
                         k -> new HashSet<>())
                 .add(loc.clone());
 
@@ -121,8 +131,15 @@ public class StashManager {
                 loc,
                 task -> {
 
-                    // 埋まっていても強制除去
-                    loc.getBlock().setType(Material.AIR, false);
+                    // 初回のみ元ブロックを保存
+                    originalBlocks
+                            .computeIfAbsent(
+                                    uuid,
+                                    k -> new HashMap<>())
+                            .putIfAbsent(
+                                    loc.clone(),
+                                    loc.getBlock().getType()
+                            );
 
                     loc.getBlock().setType(material, false);
                 });
@@ -140,16 +157,32 @@ public class StashManager {
 
         Set<Location> blocks = placedBlocks.get(uuid);
 
+        Map<Location, Material> originals =
+                originalBlocks.get(uuid);
+
         for (Location loc : blocks) {
 
             Bukkit.getRegionScheduler().run(
                     Tspawnstash.getInstance(),
                     loc,
-                    task -> loc.getBlock()
-                            .setType(Material.AIR, false));
+                    task -> {
+
+                        Material original = Material.AIR;
+
+                        if (originals != null) {
+                            original = originals.getOrDefault(
+                                    loc,
+                                    Material.AIR
+                            );
+                        }
+
+                        loc.getBlock()
+                                .setType(original, false);
+                    });
         }
 
         placedBlocks.remove(uuid);
+        originalBlocks.remove(uuid);
     }
 
     /*
@@ -176,21 +209,7 @@ public class StashManager {
      */
     public static void cleanup(Player player) {
 
-        UUID uuid = player.getUniqueId();
-
-        if (!placedBlocks.containsKey(uuid))
-            return;
-
-        for (Location loc : placedBlocks.get(uuid)) {
-
-            Bukkit.getRegionScheduler().run(
-                    Tspawnstash.getInstance(),
-                    loc,
-                    task -> loc.getBlock()
-                            .setType(Material.AIR, false));
-        }
-
-        placedBlocks.remove(uuid);
+        remove(player);
     }
 
     /*
@@ -198,7 +217,6 @@ public class StashManager {
      */
     public static boolean toggle(Player player) {
 
-        // 既に存在する
         if (hasStash(player)) {
 
             remove(player);
@@ -206,11 +224,9 @@ public class StashManager {
             return true;
         }
 
-        // 残骸がある
         if (hasRemains(player)) {
 
             cleanup(player);
-
             player.sendMessage("§e残骸を削除しました");
             return true;
         }
